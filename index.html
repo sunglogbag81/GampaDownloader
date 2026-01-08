@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>YouTube Downloader</title>
+
+  <!-- Simple.css (classless) -->
+  <link rel="stylesheet" href="https://cdn.simplecss.org/simple.min.css" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<header>
+  <h1>YouTube Downloader</h1>
+  <p>대기열 기반 다운로드 + 필터링 + 코덱/품질 설정 (개인용 GUI)</p>
+  <p>
+    <a class="button" href="./downloads/YouTubeDownloader.exe">Windows 다운로드</a>
+    <a href="https://github.com/USER/REPO">GitHub</a>
+  </p>
+</header>
+
+<main>
+  <section>
+    <h2>주요 기능</h2>
+    <ul>
+      <li>URL 여러 개/채널 탭 큐로 추가</li>
+      <li>Shorts 제외, 키워드 포함/제외, 날짜 필터</li>
+      <li>품질 선택(최대 해상도 제한), 코덱 선호 설정</li>
+      <li>ffmpeg/ffprobe 동봉(병합/후처리)</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>사용 방법</h2>
+    <ol>
+      <li>exe 실행</li>
+      <li>저장 폴더 선택</li>
+      <li>URL 입력 → 대기열 추가 → 다운로드 시작</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>주의</h2>
+    <ul>
+      <li>이 앱은 yt-dlp/ffmpeg를 사용하며, 사용자는 각 서비스 약관과 저작권을 준수해야 합니다.</li>
+      <li>Windows SmartScreen에서 경고가 뜰 수 있어요(서명되지 않은 exe).</li>
+    </ul>
+  </section>
+</main>
+
+<footer>
+  <p>© <span id="y"></span> LocalLab · Built with PySide6 + yt-dlp</p>
+</footer>
+
+<script>
+  document.getElementById("y").textContent = new Date().getFullYear();
+</script>
+</body>
+</html>
