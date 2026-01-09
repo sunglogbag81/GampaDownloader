@@ -18,7 +18,7 @@ jobs:
       - name: Install deps
         run: |
           pip install -U pyinstaller
-          pip install -U ytdlp PySide6
+          pip install -U yt-dlp PySide6
 
       - name: Download ffmpeg/ffprobe
         shell: pwsh
