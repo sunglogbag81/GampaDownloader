@@ -36,7 +36,7 @@ jobs:
       - name: Build onefile exe
         shell: pwsh
         run: |
-          pyinstaller --onefile --windowed backup.py `
+          pyinstaller --onefile --windowed main.py `
             --name "YouTubeDownloader" `
             --add-binary "ffmpeg.exe;." `
             --add-binary "ffprobe.exe;."
