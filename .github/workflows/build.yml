@@ -1,0 +1,47 @@
+name: build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: |
+          pip install -U pyinstaller
+          pip install -U ytdlp PySide6
+
+      - name: Download ffmpeg/ffprobe
+        shell: pwsh
+        run: |
+          $url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+          Invoke-WebRequest $url -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg_unzipped -Force
+
+          # zip 안에서 exe 찾아서 현재 폴더로 복사
+          $ffmpeg = Get-ChildItem -Path ffmpeg_unzipped -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+          $ffprobe = Get-ChildItem -Path ffmpeg_unzipped -Recurse -Filter ffprobe.exe | Select-Object -First 1
+          Copy-Item $ffmpeg.FullName  -Destination .\ffmpeg.exe  -Force
+          Copy-Item $ffprobe.FullName -Destination .\ffprobe.exe -Force
+
+      - name: Build onefile exe
+        shell: pwsh
+        run: |
+          pyinstaller --onefile --windowed backup.py `
+            --name "YouTubeDownloader" `
+            --add-binary "ffmpeg.exe;." `
+            --add-binary "ffprobe.exe;."
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: YouTubeDownloader-windows
+          path: dist/YouTubeDownloader.exe
