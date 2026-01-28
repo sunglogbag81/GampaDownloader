@@ -21,55 +21,168 @@
 
 <main>
   <section>
-    <h2>공지: 지원 중단</h2>
+    <h2>공지: 지원 중단(중요)</h2>
     <p>
       이 프로그램은 더 이상 업데이트/지원하지 않습니다.
-      (현재 배포된 버전은 계속 다운로드 가능하지만, 동작을 보장하지 않습니다.)
+      (현재 배포된 버전은 계속 다운로드 가능하지만, 환경에 따라 정상 동작을 보장하지 않습니다.)
+    </p>
+
+    <ul>
+      <li>
+        Windows에서 Chrome/Edge 쿠키를 자동으로 가져오는 방식(yt-dlp <code>--cookies-from-browser</code>)이
+        브라우저/OS 보안 정책 변화로 인해 정상 동작하지 않는 경우가 있습니다.
+      </li>
+      <li>
+        대표적으로 다음과 같은 문제로 “쿠키 ON인데도 실패”가 발생할 수 있습니다:
+        <ul>
+          <li>
+            Chrome/Edge 쿠키 DB 잠금(파일 잠김) → 쿠키 DB를 복사할 수 없음:
+            <a href="https://github.com/yt-dlp/yt-dlp/issues/7271">#7271</a>
+          </li>
+          <li>
+            DPAPI 복호화 실패(쿠키 값 복호화 불가) → <code>Failed to decrypt with DPAPI</code>:
+            <a href="https://github.com/yt-dlp/yt-dlp/issues/10927">#10927</a>
+          </li>
+        </ul>
+      </li>
+      <li>
+        이 문제는 앱 자체보다는 브라우저/OS/YouTube 측 정책 변화에 크게 영향을 받으며,
+        사용자 PC 환경별로 해결 방법이 달라 “서비스 형태”로 제공하기 어렵다고 판단했습니다.
+      </li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>참고: 쿠키 없이도 되는 경우</h2>
+    <p>
+      공개 영상(로그인/연령 제한/멤버십/지역 제한/봇 검증 등이 없는 경우)은 쿠키 없이도 다운로드가 가능한 경우가 있습니다.
+      반대로, 어떤 사용자/네트워크에서는 “일반 영상도” 추가 인증이 필요해질 수 있습니다.
+    </p>
+
+    <ul>
+      <li>만약 쿠키를 끄고도 잘 된다면: 쿠키 없이 사용하는 편이 제일 안정적입니다.</li>
+      <li>쿠키 없이 막힌다면: 아래 “대안/해결 방법”을 따라 해주세요.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>대안/해결 방법(추천 순서)</h2>
+
+    <h3>1) (추천) Firefox 쿠키로 시도</h3>
+    <p>
+      Windows에서 Chrome/Edge 쿠키 자동 추출이 깨지는 경우가 있어, 워크어라운드로 Firefox 사용이 자주 안내됩니다.
+      (특히 DPAPI 관련 이슈에서는 “Use Firefox / Use Linux” 등이 워크어라운드로 언급됩니다.)
+    </p>
+
+    <ol>
+      <li>Firefox 설치</li>
+      <li>Firefox에서 YouTube 로그인</li>
+      <li>(앱에서 지원되는 경우) 쿠키 브라우저를 Firefox로 바꾼 뒤 다시 시도</li>
+    </ol>
+
+    <p><strong>CLI 예시</strong> (고급 사용자):</p>
+    <pre><code>yt-dlp --cookies-from-browser firefox "https://www.youtube.com/watch?v=dQw4w9WgXcQ"</code></pre>
+    <p>
+      전용 Firefox 프로필을 따로 만들어 쓰고 싶다면, 이슈 #10927에 “프로필 디렉터리 지정” 예시도 언급되어 있습니다.
+    </p>
+    <pre><code>yt-dlp --cookies-from-browser firefox:"&lt;profile dir&gt;" "https://www.youtube.com/watch?v=dQw4w9WgXcQ"</code></pre>
+
+    <hr />
+
+    <h3>2) Chrome/Edge를 꼭 써야 한다면: “브라우저 완전 종료” 후 재시도</h3>
+    <p>
+      Chrome/Edge 쿠키 DB 파일이 잠겨서 복사가 안 되는 경우가 흔합니다.
+      이 경우 브라우저 창만 닫지 말고, 트레이/백그라운드까지 완전히 종료해야 해결될 수 있습니다.
     </p>
     <ul>
-      <li>
-        Windows 환경에서 Chrome/Edge 쿠키를 자동으로 가져오는 방식(yt-dlp <code>--cookies-from-browser</code>)이
-        브라우저 보안/정책 변경으로 인해 정상 동작하지 않는 경우가 있습니다.
-      </li>
-      <li>
-        대표적으로 Chrome/Edge 쿠키 DB 잠금 문제(#7271) 또는 DPAPI 복호화 실패(#10927)로 인해
-        “쿠키를 켰는데도 분석/다운로드가 실패”할 수 있습니다.
-      </li>
-      <li>
-        관련 이슈:
-        <a href="https://github.com/yt-dlp/yt-dlp/issues/7271">Chrome 쿠키 DB 잠금 문제 (#7271)</a>,
-        <a href="https://github.com/yt-dlp/yt-dlp/issues/10927">DPAPI 복호화 실패 (#10927)</a>
-      </li>
+      <li>작업 관리자에서 chrome.exe / msedge.exe 종료</li>
+      <li>브라우저 설정에서 “백그라운드 앱 계속 실행” 옵션 끄기(있는 경우)</li>
+      <li>다시 앱 실행 → 쿠키 ON(Chrome/Edge) → 재시도</li>
     </ul>
-  </section>
 
-  <section>
-    <h2>참고: 쿠키가 없어도 되는 경우</h2>
+    <hr />
+
+    <h3>3) Chrome 실행 옵션으로 쿠키 DB 잠금 완화(환경에 따라 효과)</h3>
+    <p>
+      이슈 #7271에서 제시된 방법으로, Chrome을 <code>--disable-features=LockProfileCookieDatabase</code> 옵션으로 실행하면
+      쿠키 DB 잠금 문제를 완화할 수 있다고 안내되어 있습니다.
+    </p>
+
+    <p><strong>방법(예시)</strong>:</p>
+    <ol>
+      <li>Chrome 바로가기(바탕화면) 우클릭 → 속성</li>
+      <li>대상(Target)에 아래처럼 플래그 추가</li>
+    </ol>
+    <pre><code>"C:\Program Files\Google\Chrome\Application\chrome.exe" --disable-features=LockProfileCookieDatabase</code></pre>
+
+    <p>
+      주의: 이 방법은 브라우저 버전/정책에 따라 언제든 효과가 없어질 수 있습니다.
+    </p>
+
+    <hr />
+
+    <h3>4) (권장) 쿠키를 파일로 내보내서 사용(<code>cookies.txt</code> / <code>--cookies</code>)</h3>
+    <p>
+      DPAPI 복호화 실패가 발생하는 환경에서는 “브라우저 쿠키를 직접 읽기”가 막힐 수 있어,
+      확장프로그램 등으로 쿠키를 파일로 export해서 <code>--cookies</code>로 사용하는 방식이 워크어라운드로 안내됩니다.
+    </p>
+
+    <p><strong>개념</strong>:</p>
     <ul>
-      <li>일부 일반(공개) 영상은 쿠키 없이도 다운로드가 가능합니다.</li>
-      <li>다만 사용자/네트워크/YouTube 정책 변화에 따라 공개 영상도 추가 인증이 필요해질 수 있습니다.</li>
+      <li>브라우저(Chrome/Firefox 등)에서 YouTube 로그인</li>
+      <li>쿠키를 Netscape 포맷 cookies.txt로 내보내기(export)</li>
+      <li>yt-dlp/앱은 그 파일을 읽어서 인증된 요청을 수행</li>
+    </ul>
+
+    <p><strong>CLI 예시</strong>:</p>
+    <pre><code>yt-dlp --cookies "cookies.txt" "https://www.youtube.com/watch?v=dQw4w9WgXcQ"</code></pre>
+
+    <p>
+      참고로 커뮤니티 문서에서는 Chrome 쿠키 DB 잠금 문제의 해결책으로
+      <code>--disable-features=LockProfileCookieDatabase</code> 또는 플러그인(ChromeCookieUnlock)을 언급하기도 합니다.
+    </p>
+    <pre><code># 예시(개념): 브라우저 쿠키 자동 추출(환경에 따라 실패 가능)
+yt-dlp --cookies-from-browser chrome "https://www.youtube.com/watch?v=dQw4w9WgXcQ"</code></pre>
+
+    <hr />
+
+    <h3>5) “쿠키 잠금” 플러그인(ChromeCookieUnlock) 관련</h3>
+    <p>
+      ChromeCookieUnlock는 “쿠키 DB가 잠겨서 복사 자체가 안 되는 문제(#7271류)”에 도움될 수 있지만,
+      “DPAPI 복호화 실패(#10927류)”까지 항상 해결해주지는 않습니다.
+    </p>
+    <ul>
+      <li>증상 1: <code>Could not copy Chrome cookie database</code> → 잠금(락) 문제 가능성</li>
+      <li>증상 2: <code>Failed to decrypt with DPAPI</code> → 복호화 문제 가능성(이 경우 Firefox/쿠키 export가 더 현실적)</li>
     </ul>
   </section>
 
   <section>
-    <h2>대안 안내</h2>
+    <h2>자주 뜨는 오류 &amp; 체크리스트</h2>
     <ul>
       <li>
-        Firefox 쿠키로는 정상 동작하는 경우가 많습니다.
-        (yt-dlp 이슈에서도 “Use Firefox”가 Windows의 주요 워크어라운드로 안내됩니다.)
+        <strong>ERROR: Could not copy Chrome cookie database</strong><br />
+        원인: Chrome/Edge 쿠키 DB 파일 잠김 가능성(#7271).<br />
+        해결: 브라우저 완전 종료 → 재시도, 또는 Chrome을 플래그로 실행, 또는 Firefox 쿠키/쿠키 export 방식 사용.
       </li>
       <li>
-        Chrome/Edge만 사용하는 환경에서는, 쿠키를 확장프로그램 등으로 내보내서
-        <code>--cookies</code> 방식으로 사용하는 것이 대안으로 안내됩니다.
+        <strong>ERROR: Failed to decrypt with DPAPI</strong><br />
+        원인: Windows에서 Chrome 계열 쿠키 복호화 실패 가능성(#10927).<br />
+        해결: Firefox 사용 또는 쿠키 export 후 <code>--cookies</code> 방식 권장.
       </li>
       <li>
-        또는 4K Video Downloader 같은 전용 프로그램을 이용하는 것도 방법입니다.
+        <strong>ERROR: Sign in to confirm you’re not a bot</strong><br />
+        해결: 쿠키가 필요할 수 있으며, yt-dlp 공식 문서/가이드를 참고해 인증을 구성해야 할 수 있습니다.
+      </li>
+      <li>
+        <strong>쿠키 ON인데도 “분석 실패/정보를 가져오지 못했습니다”</strong><br />
+        해결: 위 오류 메시지가 로그에 같이 있는지 확인(특히 Chrome 쿠키 관련 에러), Firefox로 전환하거나 쿠키 파일 방식 사용.
       </li>
     </ul>
   </section>
 
   <section>
-    <h2>주요 기능(마지막 버전 기준)</h2>
+    <h2>프로그램 소개(마지막 버전 기준)</h2>
     <ul>
       <li>URL 여러 개/채널 탭 큐로 추가</li>
       <li>Shorts 제외, 키워드 포함/제외, 날짜 필터</li>
@@ -84,7 +197,26 @@
       <li>exe 실행</li>
       <li>저장 폴더 선택</li>
       <li>URL 입력 → 대기열 추가 → 다운로드 시작</li>
+      <li>실패 시: 위 “대안/해결 방법” 순서대로 시도</li>
     </ol>
+  </section>
+
+  <section>
+    <h2>고급 사용자용(참고 링크)</h2>
+    <ul>
+      <li>
+        yt-dlp 쿠키 관련 커뮤니티 가이드(쿠키/브라우저 잠금/플러그인 언급 포함):
+        <a href="https://www.reddit.com/r/youtubedl/wiki/cookies/">r/youtubedl Wiki - cookies</a>
+      </li>
+      <li>
+        Chrome/Edge 쿠키 DB 잠금 이슈:
+        <a href="https://github.com/yt-dlp/yt-dlp/issues/7271">yt-dlp #7271</a>
+      </li>
+      <li>
+        DPAPI 복호화 실패 이슈:
+        <a href="https://github.com/yt-dlp/yt-dlp/issues/10927">yt-dlp #10927</a>
+      </li>
+    </ul>
   </section>
 
   <section>
@@ -92,7 +224,8 @@
     <ul>
       <li>이 앱은 yt-dlp/ffmpeg를 사용하며, 사용자는 각 서비스 약관과 저작권을 준수해야 합니다.</li>
       <li>Windows SmartScreen에서 경고가 뜰 수 있어요(서명되지 않은 exe).</li>
-      <li>환경(브라우저/Windows/YouTube 정책) 변화로 인해 일부 영상은 다운로드가 실패할 수 있습니다.</li>
+      <li>브라우저/Windows/YouTube 정책 변화로 인해 공개 영상도 포함해 다운로드가 실패할 수 있습니다.</li>
+      <li>본 페이지의 해결 방법은 “가능한 워크어라운드” 안내이며, 모든 환경에서 100% 보장되지 않습니다.</li>
     </ul>
   </section>
 </main>
@@ -106,4 +239,3 @@
 </script>
 </body>
 </html>
-
