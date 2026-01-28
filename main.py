@@ -1,16 +1,21 @@
-# ===== main.py (FULL) - Part 1 / N =====
 import os
 import sys
 import re
 import time
 import atexit
 import faulthandler
+import shutil
 from pathlib import Path
 from dataclasses import dataclass
 from datetime import timedelta
 from collections import deque
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 import yt_dlp
+
 from PySide6.QtCore import (
     Qt, QObject, QThread, Signal, Slot, QSettings, QMimeData,
     qInstallMessageHandler, QTimer
@@ -51,7 +56,7 @@ def _setup_qt_message_log():
     fp.write(f"\n=== qt session start {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
     fp.flush()
 
-    def handler(mode, context, message):
+    def handler(_mode, _context, message):
         try:
             fp.write(message + "\n")
             fp.flush()
@@ -65,6 +70,7 @@ def _setup_qt_message_log():
 # -------------------- Utilities --------------------
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 URL_RE = re.compile(r"https?://[^\s]+")
+TAB_SUFFIXES = ("videos", "streams", "live", "shorts", "featured", "playlists")
 
 
 def strip_ansi(s: str) -> str:
@@ -82,12 +88,13 @@ def app_base_path() -> str:
         return sys._MEIPASS
     return os.path.dirname(os.path.abspath(__file__))
 
+
 def ffmpeg_location() -> str | None:
     base = app_base_path()
     ffmpeg = os.path.join(base, "ffmpeg.exe")
     ffprobe = os.path.join(base, "ffprobe.exe")
     if os.path.exists(ffmpeg) and os.path.exists(ffprobe):
-        return base  # 둘이 있는 폴더
+        return base
     return None
 
 
@@ -98,9 +105,6 @@ def extract_urls_from_text(text: str) -> list[str]:
 
 def normalize_url(url: str) -> str:
     return (url or "").strip()
-
-
-TAB_SUFFIXES = ("videos", "streams", "live", "shorts", "featured", "playlists")
 
 
 def normalize_channel_to_videos(url: str) -> str:
@@ -129,16 +133,40 @@ def looks_like_tab_entry(e: dict) -> bool:
 
 def safe_date_yyyymmdd(s: str) -> str:
     """
-    yt-dlp --dateafter/--datebefore 는 yyyymmdd 등을 받는다.
-    UI 입력에서 'YYYY-MM-DD' 또는 'YYYYMMDD'를 허용.
+    yt-dlp dateafter/datebefore 옵션용으로 YYYYMMDD만 반환(유효하지 않으면 "").
     """
     t = (s or "").strip()
     if not t:
         return ""
     t = t.replace("-", "").replace("/", "").replace(".", "")
     if len(t) != 8 or not t.isdigit():
-        return ""  # invalid
+        return ""
     return t
+
+
+def detect_js_runtimes() -> dict[str, dict]:
+    """
+    yt-dlp --js-runtimes RUNTIME[:PATH] 개념에 맞춰
+    {runtime: {"path": "..."} } 형태로 반환.
+    """
+    candidates = [
+        ("deno", ["deno"]),
+        ("node", ["node", "nodejs"]),
+        ("quickjs", ["qjs", "quickjs"]),
+        ("bun", ["bun"]),
+    ]
+
+    out: dict[str, dict] = {}
+    for runtime, exes in candidates:
+        found_path = None
+        for exe in exes:
+            p = shutil.which(exe)
+            if p:
+                found_path = p
+                break
+        if found_path:
+            out[runtime] = {"path": found_path}
+    return out
 
 
 # -------------------- Themes --------------------
@@ -177,72 +205,66 @@ QLabel#Header { font-size: 20px; font-weight: 800; color: #FFFFFF; }
 QLabel#Status { color: #DCDDDE; font-weight: 700; }
 
 QLineEdit, QPlainTextEdit, QComboBox {
-  background: #2F3136;
-  border: 1px solid #202225;
-  border-radius: 10px;
-  padding: 10px;
-  color: #DCDDDE;
-  selection-background-color: #5865F2;
+    background: #2F3136;
+    border: 1px solid #202225;
+    border-radius: 10px;
+    padding: 10px;
+    color: #DCDDDE;
+    selection-background-color: #5865F2;
 }
-
 QLineEdit:focus, QComboBox:focus { border: 1px solid #5865F2; }
 QComboBox::drop-down { border: 0px; width: 28px; }
 QComboBox::down-arrow {
-  image: none;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-top: 8px solid #DCDDDE;
-  margin-right: 10px;
+    image: none;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid #DCDDDE;
+    margin-right: 10px;
 }
 
 QGroupBox {
-  border: 1px solid #202225;
-  border-radius: 12px;
-  margin-top: 12px;
+    border: 1px solid #202225;
+    border-radius: 12px;
+    margin-top: 12px;
 }
-
 QGroupBox::title {
-  subcontrol-origin: margin;
-  subcontrol-position: top left;
-  padding: 0 6px;
-  color: #DCDDDE;
-  font-weight: 800;
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 6px;
+    color: #DCDDDE;
+    font-weight: 800;
 }
 
 QTableWidget {
-  background: #2F3136;
-  border: 1px solid #202225;
-  border-radius: 12px;
-  alternate-background-color: #2B2D31;
+    background: #2F3136;
+    border: 1px solid #202225;
+    border-radius: 12px;
+    alternate-background-color: #2B2D31;
 }
-
 QHeaderView::section {
-  background: #202225;
-  color: #DCDDDE;
-  padding: 8px;
-  border: 0px;
+    background: #202225;
+    color: #DCDDDE;
+    padding: 8px;
+    border: 0px;
 }
-
 QTableWidget::item { padding: 6px; }
 QTableWidget::item:selected { background: #3A3D44; }
 
 QPushButton {
-  background: #2F3136;
-  border: 1px solid #202225;
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-weight: 800;
-  color: #DCDDDE;
+    background: #2F3136;
+    border: 1px solid #202225;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-weight: 800;
+    color: #DCDDDE;
 }
-
 QPushButton:hover { background: #34373C; border: 1px solid #1F2124; }
 QPushButton:pressed {
-  background: #232428;
-  border: 1px solid #5865F2;
-  padding-top: 12px;
-  padding-bottom: 8px;
+    background: #232428;
+    border: 1px solid #5865F2;
+    padding-top: 12px;
+    padding-bottom: 8px;
 }
-
 QPushButton:disabled { background: #2B2D31; color: #7B8190; border: 1px solid #202225; }
 
 QPushButton#Primary { background: #5865F2; border: 1px solid #5865F2; color: #FFFFFF; }
@@ -258,40 +280,33 @@ QPushButton#Danger:hover { background: #D83C3E; border: 1px solid #D83C3E; }
 QPushButton#Danger:pressed { background: #A92E30; border: 1px solid #A92E30; padding-top: 12px; padding-bottom: 8px; }
 
 QProgressBar {
-  background: #202225;
-  border: 1px solid #202225;
-  border-radius: 10px;
-  height: 14px;
-  text-align: center;
-  color: #DCDDDE;
+    background: #202225;
+    border: 1px solid #202225;
+    border-radius: 10px;
+    height: 14px;
+    text-align: center;
+    color: #DCDDDE;
 }
-
 QProgressBar::chunk { background: #5865F2; border-radius: 10px; }
 
-/* Tabs - Discord-ish (clean) */
 QTabWidget::pane {
-  border: 1px solid #202225;
-  border-radius: 12px;
-  top: 0px;
-  background: #2F3136;
+    border: 1px solid #202225;
+    border-radius: 12px;
+    top: 0px;
+    background: #2F3136;
 }
-
-QTabBar { background: transparent; }
-
 QTabBar::tab {
-  background: #2B2D31;
-  color: #DCDDDE;
-  border: 1px solid #202225;
-  border-bottom: 0px;
-  padding: 8px 12px;
-  border-top-left-radius: 10px;
-  border-top-right-radius: 10px;
-  margin-right: 6px;
+    background: #2B2D31;
+    color: #DCDDDE;
+    border: 1px solid #202225;
+    border-bottom: 0px;
+    padding: 8px 12px;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    margin-right: 6px;
 }
-
 QTabBar::tab:selected { background: #2F3136; }
 QTabBar::tab:hover { background: #34373C; }
-
 QCheckBox { color: #DCDDDE; }
 """
 
@@ -302,65 +317,61 @@ QLabel#Header { font-size: 20px; font-weight: 800; color: #111827; }
 QLabel#Status { color: #111827; font-weight: 700; }
 
 QLineEdit, QPlainTextEdit, QComboBox {
-  background: #FFFFFF;
-  border: 1px solid #D1D5DB;
-  border-radius: 10px;
-  padding: 10px;
-  color: #111827;
-  selection-background-color: #2563EB;
+    background: #FFFFFF;
+    border: 1px solid #D1D5DB;
+    border-radius: 10px;
+    padding: 10px;
+    color: #111827;
+    selection-background-color: #2563EB;
 }
-
 QLineEdit:focus, QComboBox:focus { border: 1px solid #2563EB; }
 QComboBox::drop-down { border: 0px; width: 28px; }
 QComboBox::down-arrow {
-  image: none;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-top: 8px solid #111827;
-  margin-right: 10px;
+    image: none;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid #111827;
+    margin-right: 10px;
 }
 
 QGroupBox {
-  border: 1px solid #D1D5DB;
-  border-radius: 12px;
-  margin-top: 12px;
+    border: 1px solid #D1D5DB;
+    border-radius: 12px;
+    margin-top: 12px;
 }
-
 QGroupBox::title {
-  subcontrol-origin: margin;
-  subcontrol-position: top left;
-  padding: 0 6px;
-  color: #111827;
-  font-weight: 800;
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 6px;
+    color: #111827;
+    font-weight: 800;
 }
 
 QTableWidget {
-  background: #FFFFFF;
-  border: 1px solid #D1D5DB;
-  border-radius: 12px;
-  alternate-background-color: #F3F4F6;
+    background: #FFFFFF;
+    border: 1px solid #D1D5DB;
+    border-radius: 12px;
+    alternate-background-color: #F3F4F6;
 }
-
 QHeaderView::section { background: #F3F4F6; color: #111827; padding: 8px; border: 0px; }
+QTableWidget::item { padding: 6px; }
 QTableWidget::item:selected { background: #DBEAFE; }
 
 QPushButton {
-  background: #E5E7EB;
-  border: 1px solid #D1D5DB;
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-weight: 800;
-  color: #111827;
+    background: #E5E7EB;
+    border: 1px solid #D1D5DB;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-weight: 800;
+    color: #111827;
 }
-
 QPushButton:hover { background: #D1D5DB; }
 QPushButton:pressed {
-  background: #C7CDD6;
-  border: 1px solid #2563EB;
-  padding-top: 12px;
-  padding-bottom: 8px;
+    background: #C7CDD6;
+    border: 1px solid #2563EB;
+    padding-top: 12px;
+    padding-bottom: 8px;
 }
-
 QPushButton:disabled { color: #9CA3AF; }
 
 QPushButton#Primary { background: #2563EB; border: 1px solid #2563EB; color: white; }
@@ -376,39 +387,34 @@ QPushButton#Danger:hover { background: #B91C1C; border: 1px solid #B91C1C; }
 QPushButton#Danger:pressed { background: #991B1B; border: 1px solid #991B1B; padding-top: 12px; padding-bottom: 8px; }
 
 QProgressBar {
-  background: #E5E7EB;
-  border: 1px solid #D1D5DB;
-  border-radius: 10px;
-  height: 14px;
-  text-align: center;
+    background: #E5E7EB;
+    border: 1px solid #D1D5DB;
+    border-radius: 10px;
+    height: 14px;
+    text-align: center;
 }
-
 QProgressBar::chunk { background: #2563EB; border-radius: 10px; }
 
-/* Tabs - light (clean) */
 QTabWidget::pane {
-  border: 1px solid #D1D5DB;
-  border-radius: 12px;
-  top: 0px;
-  background: #FFFFFF;
+    border: 1px solid #D1D5DB;
+    border-radius: 12px;
+    top: 0px;
+    background: #FFFFFF;
 }
-
-QTabBar { background: transparent; }
-
 QTabBar::tab {
-  background: #F3F4F6;
-  color: #111827;
-  border: 1px solid #D1D5DB;
-  border-bottom: 0px;
-  padding: 8px 12px;
-  border-top-left-radius: 10px;
-  border-top-right-radius: 10px;
-  margin-right: 6px;
+    background: #F3F4F6;
+    color: #111827;
+    border: 1px solid #D1D5DB;
+    border-bottom: 0px;
+    padding: 8px 12px;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    margin-right: 6px;
 }
-
 QTabBar::tab:selected { background: #FFFFFF; }
 QTabBar::tab:hover { background: #E5E7EB; }
 """
+
 
 # -------------------- Data --------------------
 @dataclass
@@ -426,12 +432,29 @@ class ExpandWorker(QObject):
     idle = Signal()
     request = Signal(str)
 
+    set_cookiesfrombrowser = Signal(object)  # tuple|None
+    set_js_runtimes = Signal(object)  # dict[str, dict] | None
+
     def __init__(self):
         super().__init__()
         self._stop = False
         self._queue = deque()
         self._working = False
+
+        self.cookiesfrombrowser = None
+        self.js_runtimes = None
+
+        self.set_cookiesfrombrowser.connect(self._on_set_cookiesfrombrowser)
+        self.set_js_runtimes.connect(self._on_set_js_runtimes)
         self.request.connect(self.enqueue)
+
+    @Slot(object)
+    def _on_set_cookiesfrombrowser(self, cookies):
+        self.cookiesfrombrowser = cookies
+
+    @Slot(object)
+    def _on_set_js_runtimes(self, runtimes):
+        self.js_runtimes = runtimes
 
     @Slot()
     def stop(self):
@@ -458,6 +481,7 @@ class ExpandWorker(QObject):
             self._working = False
             self.idle.emit()
             return
+
         url = self._queue.popleft()
         self._expand(url)
         QTimer.singleShot(0, self._process_next)
@@ -467,7 +491,14 @@ class ExpandWorker(QObject):
             "quiet": True,
             "ignoreerrors": True,
             "extract_flat": "in_playlist",
+            "skip_download": True,
         }
+
+        if self.cookiesfrombrowser:
+            ydl_opts["cookiesfrombrowser"] = self.cookiesfrombrowser
+        if self.js_runtimes:
+            ydl_opts["js_runtimes"] = self.js_runtimes
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             return ydl.extract_info(url, download=False)
 
@@ -487,17 +518,16 @@ class ExpandWorker(QObject):
             return
 
         entries = []
-        if isinstance(info, dict) and "entries" in info and info["entries"]:
+        if isinstance(info, dict) and info.get("entries"):
             entries = [e for e in info["entries"] if e]
 
-        # Patch: 탭 엔트리만이면 /videos로 재시도
         if entries and all(looks_like_tab_entry(e) for e in entries):
             self.log.emit("탭 엔트리만 감지됨 → /videos로 재시도")
             retry_url = normalize_channel_to_videos(url)
             if retry_url != url:
                 try:
                     info2 = self._extract_flat(retry_url)
-                    if info2 and isinstance(info2, dict) and "entries" in info2 and info2["entries"]:
+                    if isinstance(info2, dict) and info2.get("entries"):
                         entries2 = [e for e in info2["entries"] if e]
                         if entries2 and not all(looks_like_tab_entry(e) for e in entries2):
                             entries = entries2
@@ -514,6 +544,7 @@ class ExpandWorker(QObject):
                 if self._stop:
                     self.finished_one.emit(False, f"사용자 취소(수집 {n}개)", collected)
                     return
+
                 u = e.get("url") or e.get("webpage_url") or ""
                 t = e.get("title") or ""
                 if u:
@@ -532,6 +563,8 @@ class ExpandWorker(QObject):
         self.count.emit(1)
         self.finished_one.emit(True, "추가 완료(1개)", collected)
 
+
+# -------------------- Download worker --------------------
 class DownloadWorker(QObject):
     log = Signal(str)
     current_title = Signal(str)
@@ -551,6 +584,7 @@ class DownloadWorker(QObject):
         fmt: str,
         format_sort: list[str] | None,
         cookiesfrombrowser: tuple | None,
+        js_runtimes: dict[str, dict] | None,
         filter_opts: dict
     ):
         super().__init__()
@@ -562,7 +596,9 @@ class DownloadWorker(QObject):
         self.fmt = fmt
         self.format_sort = format_sort
         self.cookiesfrombrowser = cookiesfrombrowser
+        self.js_runtimes = js_runtimes
         self.filter_opts = filter_opts
+
         self._stop = False
         self._start = 0.0
         self._total = 0
@@ -584,17 +620,40 @@ class DownloadWorker(QObject):
         outtmpl = os.path.join(self.save_folder, "%(title)s.%(ext)s")
         ffloc = ffmpeg_location()
 
-        def hook(d):
+        any_fail = False
+        last_error = ""
+
+        def hook(d: dict):
             if self._stop:
                 return
             st = d.get("status")
             if st == "downloading":
-                p_str = strip_ansi(d.get("_percent_str", "0%")).replace("%", "").strip()
-                eta_str = strip_ansi(d.get("_eta_str", "--:--")).strip()
-                try:
-                    self.file_progress.emit(int(float(p_str)))
-                except Exception:
-                    pass
+                percent = None
+                p_str = strip_ansi(d.get("_percent_str", "")).replace("%", "").strip()
+                if p_str:
+                    try:
+                        percent = int(float(p_str))
+                    except Exception:
+                        percent = None
+
+                if percent is None:
+                    total = d.get("total_bytes") or d.get("total_bytes_estimate")
+                    downloaded = d.get("downloaded_bytes")
+                    if total and downloaded is not None:
+                        try:
+                            percent = int((downloaded / total) * 100)
+                        except Exception:
+                            percent = 0
+                    else:
+                        percent = 0
+
+                eta = d.get("eta")
+                if eta is None:
+                    eta_str = strip_ansi(d.get("_eta_str", "--:--")).strip()
+                else:
+                    eta_str = hms(int(eta))
+
+                self.file_progress.emit(max(0, min(100, percent)))
                 self.file_eta.emit(eta_str)
 
                 elapsed = time.time() - self._start
@@ -619,16 +678,17 @@ class DownloadWorker(QObject):
             "writesubtitles": bool(self.keep_sub),
         }
 
-        # 코덱/컨테이너 선호 (yt-dlp -S / --format-sort)
         if self.format_sort:
             ydl_opts["format_sort"] = self.format_sort
 
-        # 쿠키 (yt-dlp --cookies-from-browser, python opts: cookiesfrombrowser)
         if self.cookiesfrombrowser:
             ydl_opts["cookiesfrombrowser"] = self.cookiesfrombrowser
 
-        # 부분 다운로드(필터): dateafter/datebefore (yt-dlp 옵션)
-        ydl_opts.update(self.filter_opts)
+        if self.js_runtimes:
+            ydl_opts["js_runtimes"] = self.js_runtimes
+
+        if self.filter_opts:
+            ydl_opts.update(self.filter_opts)
 
         if ffloc:
             ydl_opts["ffmpeg_location"] = ffloc
@@ -644,6 +704,8 @@ class DownloadWorker(QObject):
                     f.write(f"format_sort={self.format_sort}\n")
                 if self.cookiesfrombrowser:
                     f.write(f"cookiesfrombrowser={self.cookiesfrombrowser}\n")
+                if self.js_runtimes:
+                    f.write(f"js_runtimes={self.js_runtimes}\n")
                 if self.filter_opts:
                     f.write(f"filter_opts={self.filter_opts}\n")
 
@@ -656,7 +718,7 @@ class DownloadWorker(QObject):
                     title = item.title or item.url
                     self.current_title.emit(title)
 
-                    msg = f"[{idx+1}/{self._total}] {title}"
+                    msg = f"[{idx + 1}/{self._total}] {title}"
                     self.log.emit(msg)
                     if f:
                         f.write(msg + "\n")
@@ -667,6 +729,8 @@ class DownloadWorker(QObject):
                     try:
                         ydl.download([item.url])
                     except Exception as e:
+                        any_fail = True
+                        last_error = str(e) or last_error
                         emsg = f"실패: {title} ({e})"
                         self.log.emit(emsg)
                         if f:
@@ -675,10 +739,15 @@ class DownloadWorker(QObject):
                     self._done += 1
                     self.total_progress.emit(int((self._done / self._total) * 100))
 
-            self.file_progress.emit(100)
-            self.total_progress.emit(100)
-            self.total_eta.emit("00:00:00")
-            self.finished.emit(True, "완료")
+            if any_fail:
+                extra = f" / 마지막 오류: {last_error}" if last_error else ""
+                self.finished.emit(False, f"일부 항목 다운로드 실패{extra}")
+            else:
+                self.file_progress.emit(100)
+                self.total_progress.emit(100)
+                self.total_eta.emit("00:00:00")
+                self.finished.emit(True, "완료")
+
         finally:
             if f:
                 f.close()
@@ -697,7 +766,6 @@ class MainWindow(QMainWindow):
 
         self.settings = QSettings(self.ORG, self.APP)
 
-        # 기본 저장 폴더: (설정값 없을 때) 사용자 다운로드 폴더
         default_download_folder = str(Path.home() / "Downloads")
         self.save_folder = self.settings.value("save_folder", default_download_folder, str)
 
@@ -708,26 +776,41 @@ class MainWindow(QMainWindow):
         self.force_best = self.settings.value("force_best", True, bool)
         self.max_quality = self.settings.value("max_quality", "1080p", str)
 
-        # 새 기능 설정
+        # 기본은 OFF
         self.use_cookies = self.settings.value("use_cookies", False, bool)
         self.cookie_browser = self.settings.value("cookie_browser", "chrome", str)
+
         self.filter_exclude_shorts = self.settings.value("filter_exclude_shorts", False, bool)
         self.filter_date_after = self.settings.value("filter_date_after", "", str)
         self.filter_date_before = self.settings.value("filter_date_before", "", str)
         self.filter_include_kw = self.settings.value("filter_include_kw", "", str)
         self.filter_exclude_kw = self.settings.value("filter_exclude_kw", "", str)
+
         self.codec_pref = self.settings.value("codec_pref", "auto", str)
+
+        self.js_runtimes = detect_js_runtimes()
 
         self.queue: list[QueueItem] = []
         self.url_set: set[str] = set()
+
         self._pending_count = 0
         self._expanding_collected_count = 0
+
+        # 확장 요청 URL 추적(확장 실패 시 재시도용)
+        self._pending_urls = deque()
+        self._expand_retry_once: set[str] = set()
 
         self.worker_thread: QThread | None = None
         self.worker: DownloadWorker | None = None
 
+        # 다운로드 재시도(쿠키 ON)용
+        self._last_download_plan: dict | None = None
+        self._retry_with_cookies_requested = False
+        self._last_fail_message = ""
+
         self._build_ui()
         self._build_menu_toolbar()
+
         self.apply_theme(self.theme_mode)
         self.on_toggle_best(None)
 
@@ -736,13 +819,30 @@ class MainWindow(QMainWindow):
         self.expand_worker = ExpandWorker()
         self.expand_worker.moveToThread(self.expand_thread)
         self.expand_thread.start()
+
         self.expand_worker.log.connect(self.append_log)
         self.expand_worker.count.connect(self.on_expand_count)
         self.expand_worker.finished_one.connect(self.on_expand_finished_one)
         self.expand_worker.idle.connect(self.on_expand_idle)
 
+        # 현재 설정(쿠키/JS 런타임)을 ExpandWorker에도 전달
+        self.expand_worker.set_cookiesfrombrowser.emit(self.build_cookiesfrombrowser())
+        self.expand_worker.set_js_runtimes.emit(self.build_js_runtimes())
+
         self.refresh_state()
         self.append_log("App started. Tabs UI + cookies + filtering + codec preference.")
+
+        if self.js_runtimes:
+            self.append_log(f"JS runtimes enabled: {list(self.js_runtimes.keys())}")
+        else:
+            self.append_log("WARNING: JS runtime not found (deno/node/quickjs/bun). YouTube downloads may fail.")
+            QMessageBox.warning(
+                self,
+                "JS 런타임 필요",
+                "YouTube 다운로드는 JS 런타임(Deno 권장, 또는 Node/Bun/QuickJS)이 필요할 수 있습니다.\n"
+                "현재 PATH에서 런타임을 찾지 못했습니다.\n\n"
+                "예) deno 설치 후 다시 실행하세요."
+            )
 
     # ----- Safe shutdown -----
     def closeEvent(self, event):
@@ -751,12 +851,14 @@ class MainWindow(QMainWindow):
                 self.worker.stop()
         except Exception:
             pass
+
         try:
             if self.worker_thread and self.worker_thread.isRunning():
                 self.worker_thread.quit()
                 self.worker_thread.wait(5000)
         except Exception:
             pass
+
         try:
             if self.expand_worker:
                 self.expand_worker.stop()
@@ -765,6 +867,7 @@ class MainWindow(QMainWindow):
                 self.expand_thread.wait(5000)
         except Exception:
             pass
+
         super().closeEvent(event)
 
     # ----- Drag & Drop -----
@@ -783,6 +886,7 @@ class MainWindow(QMainWindow):
     def _build_ui(self):
         root = QWidget()
         self.setCentralWidget(root)
+
         main = QHBoxLayout(root)
         main.setContentsMargins(14, 14, 14, 14)
         main.setSpacing(12)
@@ -803,7 +907,6 @@ class MainWindow(QMainWindow):
         left_root.addWidget(header)
         left_root.addWidget(sub)
 
-        # Input + buttons (Queue tab에 들어갈 것이라 여기서 생성만)
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText("영상/채널/재생목록 URL — Enter로 추가")
         self.url_input.returnPressed.connect(self.on_add_clicked)
@@ -826,7 +929,6 @@ class MainWindow(QMainWindow):
         self.lbl_folder.setWordWrap(True)
         self.lbl_folder.setObjectName("Subtle")
 
-        # Download settings group
         gb = QGroupBox("다운로드 옵션")
         form = QFormLayout(gb)
 
@@ -851,7 +953,6 @@ class MainWindow(QMainWindow):
         self.chk_logfile.setChecked(bool(self.log_to_file))
         self.chk_logfile.stateChanged.connect(self.on_toggle_logfile)
 
-        # Codec preference
         self.cmb_codec = QComboBox()
         self.cmb_codec.addItems([
             "auto(기본)",
@@ -869,7 +970,6 @@ class MainWindow(QMainWindow):
         form.addRow(self.chk_sub)
         form.addRow(self.chk_logfile)
 
-        # Cookies group
         gb_cookie = QGroupBox("쿠키(로그인 필요 시)")
         form_c = QFormLayout(gb_cookie)
 
@@ -887,7 +987,6 @@ class MainWindow(QMainWindow):
         form_c.addRow(self.chk_cookies)
         form_c.addRow(QLabel("브라우저"), self.cmb_browser)
 
-        # Filter group
         gb_filter = QGroupBox("부분 다운로드/필터")
         form_f = QFormLayout(gb_filter)
 
@@ -917,7 +1016,6 @@ class MainWindow(QMainWindow):
         form_f.addRow(QLabel("제목 포함 키워드"), self.in_kw_in)
         form_f.addRow(QLabel("제목 제외 키워드"), self.in_kw_out)
 
-        # Start/Stop (항상 하단 고정)
         self.btn_start = QPushButton("다운로드 시작")
         self.btn_start.setObjectName("Success")
         self.btn_start.clicked.connect(self.on_start)
@@ -927,23 +1025,19 @@ class MainWindow(QMainWindow):
         self.btn_stop.clicked.connect(self.on_stop)
         self.btn_stop.setEnabled(False)
 
-        # Tabs
         tabs = QTabWidget()
         tabs.setDocumentMode(True)
         tabs.setMovable(False)
         tabs.setTabPosition(QTabWidget.North)
-
-        # ★ 탭 아래 기본 라인 제거(가장 효과 큼)
         tabs.tabBar().setDrawBase(False)
         tabs.tabBar().setExpanding(False)
 
-        # Tab: Queue
         tab_queue = QWidget()
         q = QVBoxLayout(tab_queue)
         q.setContentsMargins(0, 10, 0, 0)
         q.setSpacing(10)
-        q.addWidget(self.url_input)
 
+        q.addWidget(self.url_input)
         row_btn = QHBoxLayout()
         row_btn.addWidget(self.btn_add)
         row_btn.addWidget(self.btn_pick)
@@ -958,7 +1052,6 @@ class MainWindow(QMainWindow):
         q.addStretch(1)
         tabs.addTab(tab_queue, "Queue")
 
-        # Tab: Download
         tab_dl = QWidget()
         d = QVBoxLayout(tab_dl)
         d.setContentsMargins(0, 10, 0, 0)
@@ -967,7 +1060,6 @@ class MainWindow(QMainWindow):
         d.addStretch(1)
         tabs.addTab(tab_dl, "Download")
 
-        # Tab: Advanced
         tab_adv = QWidget()
         a = QVBoxLayout(tab_adv)
         a.setContentsMargins(0, 10, 0, 0)
@@ -981,7 +1073,6 @@ class MainWindow(QMainWindow):
         left_root.addWidget(self.btn_start)
         left_root.addWidget(self.btn_stop)
 
-        # --- Right Widgets ---
         right = QWidget()
         r = QVBoxLayout(right)
         r.setContentsMargins(12, 12, 12, 12)
@@ -1039,8 +1130,8 @@ class MainWindow(QMainWindow):
 
     def _build_menu_toolbar(self):
         menu = self.menuBar()
-
         m_file = menu.addMenu("파일")
+
         act_save_txt = QAction("대기열 저장(TXT)...", self)
         act_save_txt.setShortcut(QKeySequence("Ctrl+S"))
         act_save_txt.triggered.connect(self.on_save_queue_txt)
@@ -1064,11 +1155,9 @@ class MainWindow(QMainWindow):
         self.act_theme_auto = QAction("테마: 자동", self, checkable=True)
         self.act_theme_dark = QAction("테마: 다크(Discord)", self, checkable=True)
         self.act_theme_light = QAction("테마: 라이트", self, checkable=True)
-
         self.act_theme_auto.triggered.connect(lambda: self.set_theme("auto"))
         self.act_theme_dark.triggered.connect(lambda: self.set_theme("dark"))
         self.act_theme_light.triggered.connect(lambda: self.set_theme("light"))
-
         m_view.addAction(self.act_theme_auto)
         m_view.addAction(self.act_theme_dark)
         m_view.addAction(self.act_theme_light)
@@ -1105,8 +1194,8 @@ class MainWindow(QMainWindow):
     def apply_theme(self, mode: str):
         app = QApplication.instance()
         app.setStyle("Fusion")
-
         mode = (mode or "dark").lower()
+
         if mode == "dark":
             app.setPalette(palette_dark_discord())
             self.setStyleSheet(QSS_DARK)
@@ -1153,8 +1242,9 @@ class MainWindow(QMainWindow):
     def set_quality_combo(self, saved: str):
         saved = (saved or "1080p").lower()
         mapping = {
-            "4320p": "4320p(8K)",
+            "4320p": "4320p(8k)",
             "4k": "2160p(4K)",
+            "2160p": "2160p(4K)",
             "1440p": "1440p",
             "1080p": "1080p",
             "720p": "720p",
@@ -1189,10 +1279,12 @@ class MainWindow(QMainWindow):
     def on_toggle_cookies(self, _):
         self.use_cookies = self.chk_cookies.isChecked()
         self.settings.setValue("use_cookies", self.use_cookies)
+        self.expand_worker.set_cookiesfrombrowser.emit(self.build_cookiesfrombrowser())
 
     def on_cookie_browser_changed(self, text: str):
         self.cookie_browser = (text or "chrome").lower()
         self.settings.setValue("cookie_browser", self.cookie_browser)
+        self.expand_worker.set_cookiesfrombrowser.emit(self.build_cookiesfrombrowser())
 
     # Filters
     def on_filter_changed(self, _=None):
@@ -1262,8 +1354,8 @@ class MainWindow(QMainWindow):
         expanding = self._pending_count > 0
         downloading = self.worker is not None
         working = expanding or downloading
-
         can_start = (len(self.queue) > 0) and bool(self.save_folder) and (not working)
+
         self.btn_start.setEnabled(can_start)
         self.btn_stop.setEnabled(working)
 
@@ -1282,6 +1374,18 @@ class MainWindow(QMainWindow):
         else:
             self.set_status("Ready.")
 
+    def _looks_like_cookie_issue(self, msg: str) -> bool:
+        s = (msg or "").lower()
+        keywords = [
+            "sign in", "login", "cookie", "cookies",
+            "403", "forbidden",
+            "not a bot", "bot",
+            "age", "members only", "private", "premium",
+            "confirm you’re not a bot", "confirm you're not a bot",
+            "join",
+        ]
+        return any(k in s for k in keywords)
+
     # Expand API
     def add_urls_as_queue(self, urls: list[str]):
         urls = [normalize_url(u) for u in urls if normalize_url(u)]
@@ -1293,6 +1397,7 @@ class MainWindow(QMainWindow):
         self.append_log(f"입력됨: {len(fixed)}개 (pending={self._pending_count})")
 
         for u in fixed:
+            self._pending_urls.append(u)
             self.expand_worker.request.emit(u)
 
         self.refresh_state()
@@ -1305,8 +1410,37 @@ class MainWindow(QMainWindow):
     @Slot(bool, str, list)
     def on_expand_finished_one(self, ok: bool, msg: str, collected: list):
         self.append_log(msg)
+
+        src_url = self._pending_urls.popleft() if self._pending_urls else ""
+
         self._pending_count = max(0, self._pending_count - 1)
         self._expanding_collected_count = 0
+
+        # 확장 실패 시 쿠키 ON 재시도 제안(한 URL당 1회만)
+        if (not ok) and (not self.use_cookies) and src_url and (src_url not in self._expand_retry_once):
+            if self._looks_like_cookie_issue(msg) or ("정보를 가져오지 못했습니다" in (msg or "")):
+                ret = QMessageBox.question(
+                    self,
+                    "분석 실패",
+                    "URL 분석(확장)에 실패했습니다.\n\n"
+                    "로그인이 필요한 영상(멤버십/연령 제한/비공개) 또는 인증이 필요한 경우\n"
+                    "쿠키를 켜면 해결될 수 있습니다.\n\n"
+                    "쿠키를 켜고 다시 시도할까요?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if ret == QMessageBox.Yes:
+                    self._expand_retry_once.add(src_url)
+
+                    # 쿠키 ON + ExpandWorker 갱신
+                    self.chk_cookies.setChecked(True)
+
+                    # 동일 URL 재확장
+                    self._pending_count += 1
+                    self._pending_urls.appendleft(src_url)
+                    self.expand_worker.request.emit(src_url)
+                    self.append_log(f"재시도 예약(쿠키 ON): {src_url}")
+                    self.refresh_state()
+                    return
 
         added = 0
         for it in collected:
@@ -1318,7 +1452,9 @@ class MainWindow(QMainWindow):
             self.queue.append(QueueItem(url=u, title=t, status="Queued"))
             added += 1
 
-        self.append_log(f"확장 반영: +{added}개 (총 {len(self.queue)}개)")
+        if added:
+            self.append_log(f"확장 반영: +{added}개 (총 {len(self.queue)}개)")
+
         self.refresh_state()
 
     @Slot()
@@ -1372,6 +1508,7 @@ class MainWindow(QMainWindow):
         self.table.setRowCount(0)
         self.queue.clear()
         self.url_set.clear()
+        self._pending_urls.clear()
         self.append_log("대기열 초기화")
         self.refresh_state()
 
@@ -1382,7 +1519,6 @@ class MainWindow(QMainWindow):
         return f"bestvideo[height<={h}]+bestaudio/best[height<={h}]"
 
     def build_format_sort(self) -> list[str] | None:
-        # yt-dlp format sorting (CLI: -S / --format-sort)와 대응되는 python 옵션 키: format_sort
         if self.codec_pref == "h264":
             return ["vcodec:h264", "res", "acodec:m4a"]
         if self.codec_pref == "vp9":
@@ -1396,6 +1532,9 @@ class MainWindow(QMainWindow):
             return None
         b = (self.cookie_browser or "chrome").lower()
         return (b, None, None, None)
+
+    def build_js_runtimes(self) -> dict[str, dict] | None:
+        return self.js_runtimes or None
 
     def build_filter_opts(self) -> dict:
         opts = {}
@@ -1412,6 +1551,58 @@ class MainWindow(QMainWindow):
         if db:
             opts["datebefore"] = db
         return opts
+
+    def _start_download_with_plan(self, plan: dict, force_cookies: bool = False, is_retry: bool = False):
+        if self.worker is not None:
+            QMessageBox.information(self, "안내", "이미 다운로드 중입니다.")
+            return
+
+        cookies = plan["cookies"]
+        if force_cookies:
+            cookies = self.build_cookiesfrombrowser()
+
+        if is_retry:
+            self.append_log("재시도: 쿠키 ON으로 다시 시도합니다.")
+
+        self.pb_file.setValue(0)
+        self.pb_total.setValue(0)
+        self.lbl_file_eta.setText("파일 남은 시간: --:--")
+        self.lbl_total_eta.setText("전체 남은 시간: 계산 중...")
+        self.lbl_now.setText("현재: -")
+
+        self.worker_thread = QThread(self)
+        self.worker = DownloadWorker(
+            items=plan["items"],
+            save_folder=plan["save_folder"],
+            keep_thumb=plan["keep_thumb"],
+            keep_sub=plan["keep_sub"],
+            log_path=plan["log_path"],
+            fmt=plan["fmt"],
+            format_sort=plan["fmt_sort"],
+            cookiesfrombrowser=cookies,
+            js_runtimes=plan["js_runtimes"],
+            filter_opts=plan["filter_opts"],
+        )
+
+        self.worker.moveToThread(self.worker_thread)
+        self.worker_thread.started.connect(self.worker.run)
+
+        self.worker.log.connect(self.append_log)
+        self.worker.current_title.connect(lambda t: self.lbl_now.setText(f"현재: {t}"))
+        self.worker.file_progress.connect(self.pb_file.setValue)
+        self.worker.total_progress.connect(self.pb_total.setValue)
+        self.worker.file_eta.connect(lambda s: self.lbl_file_eta.setText(f"파일 남은 시간: {s}"))
+        self.worker.total_eta.connect(lambda s: self.lbl_total_eta.setText(f"전체 남은 시간: {s}"))
+
+        self.worker.finished.connect(self.on_download_finished)
+        self.worker.finished.connect(self.worker_thread.quit)
+
+        self.worker_thread.finished.connect(self.worker.deleteLater)
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+        self.worker_thread.finished.connect(self.on_thread_finished_cleanup)
+
+        self.worker_thread.start()
+        self.refresh_state()
 
     def on_start(self):
         if not self.save_folder:
@@ -1435,19 +1626,12 @@ class MainWindow(QMainWindow):
         items = []
         for i in idxs:
             qi = self.queue[i]
-
-            if self.filter_exclude_shorts:
-                if "/shorts/" in (qi.url or "").lower():
-                    continue
-
-            if self.filter_include_kw:
-                if self.filter_include_kw.lower() not in (qi.title or "").lower():
-                    continue
-
-            if self.filter_exclude_kw:
-                if self.filter_exclude_kw.lower() in (qi.title or "").lower():
-                    continue
-
+            if self.filter_exclude_shorts and "/shorts/" in (qi.url or "").lower():
+                continue
+            if self.filter_include_kw and self.filter_include_kw.lower() not in (qi.title or "").lower():
+                continue
+            if self.filter_exclude_kw and self.filter_exclude_kw.lower() in (qi.title or "").lower():
+                continue
             items.append(qi)
 
         if not items:
@@ -1461,52 +1645,38 @@ class MainWindow(QMainWindow):
 
         fmt = self.build_format_string()
         fmt_sort = self.build_format_sort()
+
         cookies = self.build_cookiesfrombrowser()
+        js_runtimes = self.build_js_runtimes()
         filter_opts = self.build_filter_opts()
 
         self.append_log(f"선택된 포맷: {fmt}")
         if fmt_sort:
             self.append_log(f"코덱 선호(format_sort): {fmt_sort}")
-        if cookies:
-            self.append_log(f"쿠키 사용: {cookies[0]}")
+        self.append_log(f"쿠키 사용: {'ON' if cookies else 'OFF'}")
+        if js_runtimes:
+            self.append_log(f"JS runtimes: {list(js_runtimes.keys())}")
         if filter_opts:
             self.append_log(f"다운로드 필터: {filter_opts}")
 
-        self.pb_file.setValue(0)
-        self.pb_total.setValue(0)
-        self.lbl_file_eta.setText("파일 남은 시간: --:--")
-        self.lbl_total_eta.setText("전체 남은 시간: 계산 중...")
-        self.lbl_now.setText("현재: -")
+        plan = {
+            "items": [QueueItem(url=x.url, title=x.title, status=x.status) for x in items],
+            "save_folder": self.save_folder,
+            "keep_thumb": self.keep_thumb,
+            "keep_sub": self.keep_sub,
+            "log_path": log_path,
+            "fmt": fmt,
+            "fmt_sort": fmt_sort,
+            "cookies": cookies,
+            "js_runtimes": js_runtimes,
+            "filter_opts": filter_opts,
+        }
 
-        self.worker_thread = QThread()
-        self.worker = DownloadWorker(
-            items=items,
-            save_folder=self.save_folder,
-            keep_thumb=self.keep_thumb,
-            keep_sub=self.keep_sub,
-            log_path=log_path,
-            fmt=fmt,
-            format_sort=fmt_sort,
-            cookiesfrombrowser=cookies,
-            filter_opts=filter_opts
-        )
+        self._last_download_plan = plan
+        self._retry_with_cookies_requested = False
+        self._last_fail_message = ""
 
-        self.worker.moveToThread(self.worker_thread)
-        self.worker_thread.started.connect(self.worker.run)
-
-        self.worker.log.connect(self.append_log)
-        self.worker.current_title.connect(lambda t: self.lbl_now.setText(f"현재: {t}"))
-        self.worker.file_progress.connect(self.pb_file.setValue)
-        self.worker.total_progress.connect(self.pb_total.setValue)
-        self.worker.file_eta.connect(lambda s: self.lbl_file_eta.setText(f"파일 남은 시간: {s}"))
-        self.worker.total_eta.connect(lambda s: self.lbl_total_eta.setText(f"전체 남은 시간: {s}"))
-
-        self.worker.finished.connect(self.on_download_finished)
-        self.worker.finished.connect(self.worker_thread.quit)
-        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
-
-        self.worker_thread.start()
-        self.refresh_state()
+        self._start_download_with_plan(plan, force_cookies=False, is_retry=False)
 
     def on_stop(self):
         try:
@@ -1516,6 +1686,7 @@ class MainWindow(QMainWindow):
 
         self._pending_count = 0
         self._expanding_collected_count = 0
+        self._pending_urls.clear()
 
         try:
             if self.worker:
@@ -1535,15 +1706,48 @@ class MainWindow(QMainWindow):
 
     @Slot(bool, str)
     def on_download_finished(self, ok: bool, msg: str):
+        self.refresh_state()
+        self.append_log(f"결과: {msg}")
+
+        if ok:
+            QMessageBox.information(self, "완료", "다운로드가 완료되었습니다.")
+            return
+
+        if (not self.use_cookies) and self._last_download_plan and self._looks_like_cookie_issue(msg):
+            ret = QMessageBox.question(
+                self,
+                "다운로드 실패",
+                "다운로드에 실패했습니다.\n\n"
+                "로그인이 필요한 영상이거나(연령 제한/비공개/봇 의심 등)\n"
+                "YouTube가 인증을 요구하는 경우 쿠키를 켜면 해결될 수 있습니다.\n\n"
+                "쿠키를 켜고 다시 시도할까요?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if ret == QMessageBox.Yes:
+                self._retry_with_cookies_requested = True
+                self._last_fail_message = msg
+
+                # 쿠키 ON + ExpandWorker 갱신까지 자동 반영
+                self.chk_cookies.setChecked(True)
+
+                self.append_log("사용자 선택: 쿠키 ON → 스레드 종료 후 자동 재시도 예약")
+                return
+
+        QMessageBox.warning(self, "완료", msg)
+
+    @Slot()
+    def on_thread_finished_cleanup(self):
         self.worker = None
         self.worker_thread = None
         self.refresh_state()
 
-        self.append_log(f"결과: {msg}")
-        if ok:
-            QMessageBox.information(self, "완료", "다운로드가 완료되었습니다.")
-        else:
-            QMessageBox.warning(self, "완료", msg)
+        if self._retry_with_cookies_requested and self._last_download_plan:
+            self._retry_with_cookies_requested = False
+            QTimer.singleShot(0, lambda: self._start_download_with_plan(
+                self._last_download_plan,
+                force_cookies=True,
+                is_retry=True
+            ))
 
     def on_save_queue_txt(self):
         path, _ = QFileDialog.getSaveFileName(self, "대기열 저장(TXT)", "", "Text (*.txt)")
@@ -1571,7 +1775,6 @@ class MainWindow(QMainWindow):
             line = line.strip()
             if not line:
                 continue
-
             found = extract_urls_from_text(line)
             if found:
                 urls.extend(found)

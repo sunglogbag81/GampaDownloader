@@ -17,8 +17,7 @@ jobs:
 
       - name: Install deps
         run: |
-          pip install -U pyinstaller
-          pip install -U yt-dlp PySide6
+          pip install -U -r requirements.txt
 
       - name: Download ffmpeg/ffprobe
         shell: pwsh
@@ -40,6 +39,7 @@ jobs:
             --name "YouTubeDownloader" `
             --add-binary "ffmpeg.exe;." `
             --add-binary "ffprobe.exe;."
+            --add-data "yt_dlp_plugins;yt_dlp_plugins"
 
       - uses: actions/upload-artifact@v4
         with:
